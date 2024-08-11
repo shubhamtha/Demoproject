@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('clone git repo') {
+            steps {
+                git branch: 'main', url: 'https://github.com/learndevops-083/samplejavaapp.git'
+            }
+        }
+        stage('unit-test') {
+            steps {
+                    echo 'unittesting..'
+                    sh script: '/usr/share/maven/bin/mvn test'
+                        }
+            post {
+                    success {
+                        junit 'target/surefire-reports/*.xml'
+                    }
+                }			
+        }
+        stage('Sonar Code Analysis') {
+        	environment {
+        	scannerHome = tool 'sonarqube-scanner'
+    	            }
+        	steps {
+            	withSonarQubeEnv('sonarqube') {
+                	sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=maven-code-analysis"
+            	}
+            	timeout(time: 3, unit: 'MINUTES') {
+                	waitForQualityGate abortPipeline: true
+            	}
+        	  }
+        }
+        stage('maven package'){
+            steps{
+                sh '/usr/share/maven/bin/mvn package'
+            }
+        }
+        stage('publish to jfrog') {
+            steps {
+                rtUpload (
+                            serverId: 'jfrog-dev',
+                                  spec: '''{
+                                   "files": [
+                                     {
+                                       "pattern": "target/sampleapp.war",
+                                       "target": "generic-local/"
+                                    }
+                                ]
+                            }'''
+                 )
+            }
+        }
+ 
+    }
+}
